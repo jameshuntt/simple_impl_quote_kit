@@ -1,0 +1,19 @@
+[package]
+name = "simple_impl_quote_kit"
+version = "0.2.0"
+edition = "2021"
+rust-version = "1.70"
+license = "MIT OR Apache-2.0"
+description = "The token emitters behind simple_impl_derive: setters, argv pushes, subcommand and composite command surfaces, validation impls, from semantic models to code."
+authors = ["James Hunt <james@1o.business>"]
+repository = "https://github.com/jameshuntt/simple_impl_quote_kit"
+readme = "README.md"
+keywords = ["proc-macro", "derive", "cli", "quote", "codegen"]
+categories = ["development-tools::procedural-macro-helpers"]
+include = ["src/**", "tests/**", "Cargo.toml", "README.md", "LICENSE-MIT", "LICENSE-APACHE"]
+
+[dependencies]
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["full", "extra-traits"] }
+simple_impl_attr_kit = { version = "0.2.0", path = "../simple_impl_attr_kit" }
