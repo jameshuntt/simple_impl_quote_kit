@@ -31,7 +31,7 @@ dependencies = [
 
 [[package]]
 name = "simple_impl_quote_kit"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "proc-macro2",
  "quote",

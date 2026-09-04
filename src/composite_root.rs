@@ -46,6 +46,7 @@ pub struct CompositeShellQuote {
     pub ident: Ident,
     pub program: String,
     pub entries: Vec<CompositeShellEntryQuote>,
+    pub declared_fields: Vec<Ident>,
 }
 
 impl CompositeShellQuote {
@@ -58,6 +59,29 @@ impl CompositeShellQuote {
             ident,
             program: program.into(),
             entries,
+            declared_fields: Vec::new(),
+        }
+    }
+
+    pub fn with_declared_fields(mut self, fields: Vec<Ident>) -> Self {
+        self.declared_fields = fields;
+        self
+    }
+}
+
+/// A hidden method that reads each field-style entry once, so the declaring
+/// fields are not reported as never read.
+pub fn emit_declared_field_reader(ident: &Ident, fields: &[Ident]) -> TokenStream {
+    if fields.is_empty() {
+        return TokenStream::new();
+    }
+    quote! {
+        impl #ident {
+            #[doc(hidden)]
+            #[allow(dead_code)]
+            fn __declared_composite_fields(&self) {
+                #( let _ = &self.#fields; )*
+            }
         }
     }
 }
@@ -66,8 +90,11 @@ pub fn emit_composite_shell_root_impls(spec: &CompositeShellQuote) -> TokenStrea
     let ident = &spec.ident;
     let program = &spec.program;
     let methods = spec.entries.iter().map(|entry| emit_entry_method(ident, entry));
+    let field_reader = emit_declared_field_reader(ident, &spec.declared_fields);
 
     quote! {
+        #field_reader
+
         impl ::xccute_contract::CompositeShellRoot for #ident {
             fn program() -> &'static ::std::ffi::OsStr {
                 ::std::ffi::OsStr::new(#program)

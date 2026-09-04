@@ -27,6 +27,7 @@ pub struct CompositeSurfaceQuote {
     pub visibility: Visibility,
     pub segment: String,
     pub commands: Vec<CompositeSurfaceCommandQuote>,
+    pub declared_fields: Vec<Ident>,
 }
 
 impl CompositeSurfaceQuote {
@@ -41,7 +42,13 @@ impl CompositeSurfaceQuote {
             visibility,
             segment: segment.into(),
             commands,
+            declared_fields: Vec::new(),
         }
+    }
+
+    pub fn with_declared_fields(mut self, fields: Vec<Ident>) -> Self {
+        self.declared_fields = fields;
+        self
     }
 }
 
@@ -82,8 +89,11 @@ pub fn emit_composite_surface_impls(spec: &CompositeSurfaceQuote) -> TokenStream
         .commands
         .iter()
         .map(|command| emit_surface_command_wrapper(spec, command));
+    let field_reader = crate::composite_root::emit_declared_field_reader(ident, &spec.declared_fields);
 
     quote! {
+        #field_reader
+
         #[derive(Debug, Clone)]
         #visibility struct #rooted_ident<R>
         where
