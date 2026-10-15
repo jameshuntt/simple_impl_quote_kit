@@ -1,10 +1,11 @@
+use liaise_proc_macro::SynBuffer;
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{Ident, Type, Visibility};
 
 use crate::argv::emit_subcommand_field_argv_push;
 use crate::composite_shell::emit_composite_shell_command_impl;
-use crate::validation::{emit_validated_command_impl, ValidationRuleQuote};
+use crate::validation::{emit_validated_command_impl_skipping, ValidationRuleQuote};
 use crate::rooted::{emit_rooted_wrapper_and_rooting_impls, rooted_ident_for};
 use crate::setters::emit_rooted_setter;
 
@@ -78,24 +79,39 @@ impl SimpleSubcommandQuote {
 pub fn emit_simple_subcommand_contract_impls(
     spec: &SimpleSubcommandQuote,
 ) -> syn::Result<TokenStream> {
+    emit_simple_subcommand_contract_impls_skipping(spec, &[], &[])
+}
+
+/// [`emit_simple_subcommand_contract_impls`] for a derive that already
+/// reported the fields in `skipped` and left them out of `spec`: every other
+/// field and every validation rule is still checked, and a rule naming a
+/// skipped field is not reported for it again. `rule_contexts[i]`, when
+/// given, is how validation rule `i` reads in errors. The tokens are only
+/// meaningful when `skipped` is empty.
+pub fn emit_simple_subcommand_contract_impls_skipping(
+    spec: &SimpleSubcommandQuote,
+    skipped: &[Ident],
+    rule_contexts: &[String],
+) -> syn::Result<TokenStream> {
     let ident = &spec.ident;
     let segment = &spec.segment;
     let rooted_ident = rooted_ident_for(ident);
 
     let rooted_impls = emit_rooted_wrapper_and_rooting_impls(&spec.ident, &spec.visibility);
-    let setters = spec
-        .fields
-        .iter()
-        .map(emit_rooted_setter)
-        .collect::<syn::Result<Vec<_>>>()?;
-    let argv_pushes = spec
-        .fields
-        .iter()
-        .map(emit_subcommand_field_argv_push)
-        .collect::<syn::Result<Vec<_>>>()?;
-    let constructor = emit_simple_subcommand_constructor(spec)?;
+    let mut errs = SynBuffer::new();
+    let mut setters = Vec::new();
+    let mut argv_pushes = Vec::new();
+    for field in &spec.fields {
+        // the setter and the argv push check the same field type; ask once
+        if let Some(setter) = errs.absorb(emit_rooted_setter(field)) {
+            setters.push(setter);
+            argv_pushes.extend(errs.absorb(emit_subcommand_field_argv_push(field)));
+        }
+    }
+    let constructor = errs.absorb(emit_simple_subcommand_constructor(spec));
     let shell_command_impl = emit_composite_shell_command_impl(&spec.ident);
-    let validated_command_impl = emit_validated_command_impl(spec)?;
+    let validated_command_impl = errs.absorb(emit_validated_command_impl_skipping(spec, skipped, rule_contexts));
+    errs.finish()?;
 
     Ok(quote! {
         #constructor
@@ -126,14 +142,16 @@ fn emit_simple_subcommand_constructor(spec: &SimpleSubcommandQuote) -> syn::Resu
         return Ok(TokenStream::new());
     }
 
+    let mut errs = SynBuffer::new();
     for field in spec.fields.iter().filter(|field| field.init_required) {
         if matches!(field.kind, SubcommandArgKind::Flag(_)) {
-            return Err(syn::Error::new_spanned(
+            errs.push(syn::Error::new_spanned(
                 &field.ty,
                 "#[builder(init_required)] cannot be used with #[arg(flag = ...)]",
             ));
         }
     }
+    errs.finish()?;
 
     let ident = &spec.ident;
     let params = spec.fields.iter().filter(|field| field.init_required).map(|field| {

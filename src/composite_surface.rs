@@ -61,7 +61,8 @@ pub fn nested_command_rooted_ident_for(surface_ident: &Ident, method_ident: &Ide
 }
 
 fn pascal_case_ident(ident: &Ident) -> String {
-    ident
+    // r#type names the method `type`; the generated type is `Type...`
+    syn::ext::IdentExt::unraw(ident)
         .to_string()
         .split('_')
         .filter(|part| !part.is_empty())

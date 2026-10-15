@@ -32,8 +32,9 @@ pub use rooted::emit_rooted_wrapper_and_rooting_impls;
 pub use setters::emit_rooted_setter;
 pub use subcommand::{
     emit_simple_subcommand_contract_impls,
+    emit_simple_subcommand_contract_impls_skipping,
     SimpleSubcommandQuote,
     SubcommandArgKind,
     SubcommandFieldQuote,
 };
-pub use validation::{emit_validated_command_impl, ValidationRuleQuote};
+pub use validation::{emit_validated_command_impl, emit_validated_command_impl_skipping, ValidationRuleQuote};
