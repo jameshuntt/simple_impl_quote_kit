@@ -10,7 +10,7 @@ repository = "https://github.com/jameshuntt/simple_impl_quote_kit"
 readme = "README.md"
 keywords = ["proc-macro", "derive", "cli", "quote", "codegen"]
 categories = ["development-tools::procedural-macro-helpers"]
-include = ["src/**", "tests/**", "Cargo.toml", "README.md", "LICENSE-MIT", "LICENSE-APACHE"]
+include = ["src/**", "tests/**", "Cargo.toml", "CHANGELOG.md", "README.md", "LICENSE-MIT", "LICENSE-APACHE"]
 
 [dependencies]
 proc-macro2 = "1"
