@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.3.4 (2026-10-19)
+
+a command under a surface was a `{Surface}{Method}Command<R>` struct the surface wrote itself, holding the surface and the leaf: it had the leaf's argv, validation and policy, and none of its setters or exit statuses, since the surface never sees the leaf's fields. a surface inside a surface was not written at all. now the leaf writes its own wrapper for sitting under any surface, the surface finds it through xccute_contract 0.1.3's `RootableNestedCommand`, and a surface writes a wrapper of its own that is the prefix for what is under it. every level also gets its help lines. all of it is new functions beside the old ones: `emit_composite_surface_impls`, `emit_simple_subcommand_contract_impls_shaped` and `emit_composite_shell_root_impls` emit the same tokens they did.
+
+### a leaf under surfaces (src/subcommand.rs, src/nested.rs)
+
+- the leaf's setters and statuses were written onto its rooted wrapper only: [src/subcommand.rs L193-L236](https://github.com/jameshuntt/simple_impl_quote_kit/blob/517c98c5da83db85eba7c0f0fed228bf38fc9660/src/subcommand.rs#L193-L236). new `emit_simple_subcommand_nested_impls(spec, shape)` writes `{Leaf}Nested<R, P>` with the same setters and `ok_codes`/`exit_statuses`, its validation and its policy merged with the prefix's, and the `RootableNestedCommand` impl: [src/subcommand.rs L250-L269](https://github.com/jameshuntt/simple_impl_quote_kit/blob/396c3e4a997e5b383fe5e6ab7aecee1c2b040322/src/subcommand.rs#L250-L269), [src/nested.rs L19-L105](https://github.com/jameshuntt/simple_impl_quote_kit/blob/396c3e4a997e5b383fe5e6ab7aecee1c2b040322/src/nested.rs#L19-L105).
+- `SubcommandShapeQuote::with_help(words, about)` carries the leaf's help line; `_shaped` does not read it, so its tokens are the same with or without one: [src/subcommand.rs L136-L147](https://github.com/jameshuntt/simple_impl_quote_kit/blob/396c3e4a997e5b383fe5e6ab7aecee1c2b040322/src/subcommand.rs#L136-L147), [src/nested.rs L173-L184](https://github.com/jameshuntt/simple_impl_quote_kit/blob/396c3e4a997e5b383fe5e6ab7aecee1c2b040322/src/nested.rs#L173-L184).
+
+### a surface inside a surface (src/composite_surface.rs, src/nested.rs)
+
+- the surface wrote each command's wrapper struct with its argv, validation and policy, and nothing else: [src/composite_surface.rs L177-L233](https://github.com/jameshuntt/simple_impl_quote_kit/blob/517c98c5da83db85eba7c0f0fed228bf38fc9660/src/composite_surface.rs#L177-L233). new `emit_composite_surface_impls_with(spec, surfaces)` makes each command the leaf's nested wrapper, keeps `{Surface}{Method}Command<R>` as the name of the one directly under the surface (a type alias now), adds a method per surface entry, and writes `{Surface}Nested<R, P>` with every entry's method again, handing itself down as the prefix: [src/composite_surface.rs L95-L264](https://github.com/jameshuntt/simple_impl_quote_kit/blob/396c3e4a997e5b383fe5e6ab7aecee1c2b040322/src/composite_surface.rs#L95-L264), [src/nested.rs L107-L170](https://github.com/jameshuntt/simple_impl_quote_kit/blob/396c3e4a997e5b383fe5e6ab7aecee1c2b040322/src/nested.rs#L107-L170).
+- new `CompositeNestedSurfaceQuote` is a surface entry inside a surface: [src/composite_surface.rs L24-L38](https://github.com/jameshuntt/simple_impl_quote_kit/blob/396c3e4a997e5b383fe5e6ab7aecee1c2b040322/src/composite_surface.rs#L24-L38).
+- `emit_composite_surface_impls` is 0.3.3's, moved below and otherwise byte for byte: [src/composite_surface.rs L262-L420](https://github.com/jameshuntt/simple_impl_quote_kit/blob/396c3e4a997e5b383fe5e6ab7aecee1c2b040322/src/composite_surface.rs#L262-L420).
+
+### help lines (src/nested.rs, src/composite_root.rs)
+
+- `emit_entries_help_impl` writes a surface's or a root's `CommandHelp`: every entry's lines, each led by the surface's segment or the root's program. its bounds are written `for<'__help>`, so a root over an entry written by hand with no help lines still builds and has none: [src/nested.rs L186-L202](https://github.com/jameshuntt/simple_impl_quote_kit/blob/396c3e4a997e5b383fe5e6ab7aecee1c2b040322/src/nested.rs#L186-L202). `emit_composite_shell_help_impl` is the root's: [src/composite_root.rs L109-L115](https://github.com/jameshuntt/simple_impl_quote_kit/blob/396c3e4a997e5b383fe5e6ab7aecee1c2b040322/src/composite_root.rs#L109-L115).
+
+### proof
+
+- the nested leaf's setter and statuses, help only when the shape has it, the shaped tokens the same with a help line, the alias and both surface methods, the nested surface and its help bounds, the old surface emitter still writing its struct, the root's help: [tests/nested_quote.rs L28-L84](https://github.com/jameshuntt/simple_impl_quote_kit/blob/396c3e4a997e5b383fe5e6ab7aecee1c2b040322/tests/nested_quote.rs#L28-L84).
+- the derive built on these, with its three-level golden and parity run, is simple_impl_derive 0.2.7.
+- public API against 0.3.3 (rustdoc JSON): 23 items added, none removed or changed.
+- `cargo test`: 17 passed (stable and 1.85).
+
+### README and Cargo.toml
+
+- the new emitters in the list: [README.md L17-L19](https://github.com/jameshuntt/simple_impl_quote_kit/blob/396c3e4a997e5b383fe5e6ab7aecee1c2b040322/README.md#L17-L19).
+- version 0.3.3 to 0.3.4: [Cargo.toml L3-L3](https://github.com/jameshuntt/simple_impl_quote_kit/blob/396c3e4a997e5b383fe5e6ab7aecee1c2b040322/Cargo.toml#L3-L3).
+
 ## 0.3.3 (2026-10-18)
 
 a command library built on the subcommand contract kept four shapes beside it by hand: a list of words (`systemctl stop U1 U2`), a line whose first word is a value (`chown OWNER PATH`), a program with no words (`hostname`), and the exit statuses a line names. the emitters could say none of them. now they can, and a leaf that says none of them gets exactly the tokens it got before.
