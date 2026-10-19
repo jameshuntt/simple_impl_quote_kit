@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.3.3 (2026-10-18)
+
+a command library built on the subcommand contract kept four shapes beside it by hand: a list of words (`systemctl stop U1 U2`), a line whose first word is a value (`chown OWNER PATH`), a program with no words (`hostname`), and the exit statuses a line names. the emitters could say none of them. now they can, and a leaf that says none of them gets exactly the tokens it got before.
+
+### lists (src/argv.rs, src/setters.rs, src/validation.rs)
+
+- a positional pushed `self.field.clone()` and a kv pushed the key and the value, so a `Vec` field could not compile: [src/argv.rs L24-L52](https://github.com/jameshuntt/simple_impl_quote_kit/blob/8af3be770dff9a05011923875a21f6e716365cbb/src/argv.rs#L24-L52). a `Vec` positional now pushes each value as its own word, and a `Vec` kv pushes `key value` for each: [src/argv.rs L24-L66](https://github.com/jameshuntt/simple_impl_quote_kit/blob/514bbb1bdf1867164478624d912abb46977fa95a/src/argv.rs#L24-L66).
+- the setter assigned one value: [src/setters.rs L26-L43](https://github.com/jameshuntt/simple_impl_quote_kit/blob/8af3be770dff9a05011923875a21f6e716365cbb/src/setters.rs#L26-L43). a `Vec` field's setter takes any list of things that become an `OsString` and adds them after the values already there: [src/setters.rs L38-L47](https://github.com/jameshuntt/simple_impl_quote_kit/blob/514bbb1bdf1867164478624d912abb46977fa95a/src/setters.rs#L38-L47).
+- a rule asked whether a field was given by its type, bool or Option, everything else always given: [src/validation.rs L227-L236](https://github.com/jameshuntt/simple_impl_quote_kit/blob/8af3be770dff9a05011923875a21f6e716365cbb/src/validation.rs#L227-L236). a `Vec` is given when it has a value: [src/validation.rs L227-L239](https://github.com/jameshuntt/simple_impl_quote_kit/blob/514bbb1bdf1867164478624d912abb46977fa95a/src/validation.rs#L227-L239).
+
+### the line's shape (src/subcommand.rs, src/composite_shell.rs)
+
+- the argv always started with the segment: [src/subcommand.rs L128-L133](https://github.com/jameshuntt/simple_impl_quote_kit/blob/8af3be770dff9a05011923875a21f6e716365cbb/src/subcommand.rs#L128-L133). new `SubcommandShapeQuote` says what a leaf's line has besides its fields: `without_segment()`, `with_program(..)`, `with_exit_statuses(statuses, ok_codes)`. its fields are private and set by those methods, so it can grow without a break: [src/subcommand.rs L79-L150](https://github.com/jameshuntt/simple_impl_quote_kit/blob/514bbb1bdf1867164478624d912abb46977fa95a/src/subcommand.rs#L79-L150).
+- new `emit_simple_subcommand_contract_impls_shaped(spec, skipped, rule_contexts, shape)`. `_skipping` calls it with the default shape, which emits the same tokens it always did: [src/subcommand.rs L164-L236](https://github.com/jameshuntt/simple_impl_quote_kit/blob/514bbb1bdf1867164478624d912abb46977fa95a/src/subcommand.rs#L164-L236). without a segment the fields lead the line. with a program the leaf is its own root: it gets `CompositeShellRoot`, `CompositeShellCommand` and its setters on itself, from the same setter code as the rooted wrapper's (`emit_own_setter`): [src/subcommand.rs L260-L285](https://github.com/jameshuntt/simple_impl_quote_kit/blob/514bbb1bdf1867164478624d912abb46977fa95a/src/subcommand.rs#L260-L285), [src/setters.rs L6-L19](https://github.com/jameshuntt/simple_impl_quote_kit/blob/514bbb1bdf1867164478624d912abb46977fa95a/src/setters.rs#L6-L19).
+- named statuses are written into both `CompositeShellCommand` impls as `ok_codes` and `exit_statuses`, each an `xccute_contract::ExitStatusWord`; which codes are accepted is the caller's to decide and pass in: [src/subcommand.rs L238-L258](https://github.com/jameshuntt/simple_impl_quote_kit/blob/514bbb1bdf1867164478624d912abb46977fa95a/src/subcommand.rs#L238-L258). new `emit_composite_shell_command_impl_with(ident, methods)` writes more of the trait's methods into the rooted impl; `emit_composite_shell_command_impl` calls it with none: [src/composite_shell.rs L7-L32](https://github.com/jameshuntt/simple_impl_quote_kit/blob/514bbb1bdf1867164478624d912abb46977fa95a/src/composite_shell.rs#L7-L32).
+- no new variant on `SubcommandArgKind` or `ValidationRuleQuote`: a list is the existing positional and kv kinds on a `Vec` field.
+
+### proof
+
+- the tokens for a `Vec` positional, a `Vec` kv, the adding setter and the given check; the default shape against `_skipping`, token for token; a shape with no segment, a program and two statuses: [tests/simple_subcommand_quote.rs L243-L292](https://github.com/jameshuntt/simple_impl_quote_kit/blob/514bbb1bdf1867164478624d912abb46977fa95a/tests/simple_subcommand_quote.rs#L243-L292).
+- through this release, simple_impl_derive 0.2.6 generates the same tokens as 0.2.5 for every SimpleSubCommand, CompositeShell and CompositeSubCommand struct in its exhaustive parity set that expands; see its entry.
+- `cargo test`: 12 passed (stable and 1.85).
+
+### Cargo
+
+- version 0.3.2 to 0.3.3: [Cargo.toml L3](https://github.com/jameshuntt/simple_impl_quote_kit/blob/514bbb1bdf1867164478624d912abb46977fa95a/Cargo.toml#L3-L3).
+
 ## 0.3.2 (2026-10-15)
 
 before this, the subcommand contract stopped at the first error, so one bad field hid everything after it. now it collects: every field, every init_required flag field and every validation rule gets checked, the errors go into one SynBuffer, and it hard fails once at the end with all of them. also in here: _skipping versions of the two contract emitters for a derive that already reported some fields, a fix for the r#type panic in composite surfaces, and CI that tests on stable and 1.85 and publishes from main.
