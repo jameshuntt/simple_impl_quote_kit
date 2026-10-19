@@ -107,6 +107,13 @@ pub fn emit_composite_shell_root_impls(spec: &CompositeShellQuote) -> TokenStrea
     }
 }
 
+/// The root's help lines: every line under its program, each led by it.
+/// Emitted beside [`emit_composite_shell_root_impls`]'s tokens.
+pub fn emit_composite_shell_help_impl(spec: &CompositeShellQuote) -> TokenStream {
+    let entry_types: Vec<&Type> = spec.entries.iter().map(|entry| &entry.ty).collect();
+    crate::nested::emit_entries_help_impl(&spec.ident, &spec.program, &entry_types)
+}
+
 fn emit_entry_method(root_ident: &Ident, entry: &CompositeShellEntryQuote) -> TokenStream {
     let method = &entry.method;
     let ty = &entry.ty;

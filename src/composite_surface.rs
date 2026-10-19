@@ -21,6 +21,21 @@ impl CompositeSurfaceCommandQuote {
     }
 }
 
+/// A surface entry inside a surface: the method that reaches it and its type,
+/// a `CompositeSubCommand`. It takes no `init` arguments; its commands take
+/// theirs.
+#[derive(Debug, Clone)]
+pub struct CompositeNestedSurfaceQuote {
+    pub method: Ident,
+    pub ty: Type,
+}
+
+impl CompositeNestedSurfaceQuote {
+    pub fn new(method: Ident, ty: Type) -> Self {
+        Self { method, ty }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct CompositeSurfaceQuote {
     pub ident: Ident,
@@ -76,6 +91,178 @@ fn pascal_case_ident(ident: &Ident) -> String {
         .collect::<String>()
 }
 
+/// The surface, holding commands and surfaces.
+/// Every command, at any depth, is its leaf's nested wrapper
+/// (`xccute_contract::RootableNestedCommand`), so it keeps the leaf's
+/// setters, exit statuses, validation and policy; `{Surface}{Method}Command<R>`
+/// names the one directly under this surface, as it did. The surface also
+/// gets its nested wrapper, for when it sits under another surface, and its
+/// help lines.
+pub fn emit_composite_surface_impls_with(spec: &CompositeSurfaceQuote, surfaces: &[CompositeNestedSurfaceQuote]) -> TokenStream {
+    let ident = &spec.ident;
+    let visibility = &spec.visibility;
+    let segment = &spec.segment;
+    let rooted_ident = surface_rooted_ident_for(ident);
+
+    // under a root the prefix is the surface itself; under a surface it is
+    // this surface's nested wrapper
+    let rooted_prefix = (quote! { self.inner }, quote! { #ident });
+    let nested_prefix = (quote! { self }, quote! { Self });
+    let methods = spec
+        .commands
+        .iter()
+        .map(|command| emit_surface_command_method(command, &rooted_prefix, true))
+        .chain(surfaces.iter().map(|surface| emit_surface_surface_method(surface, &rooted_prefix)));
+    let nested_methods: Vec<TokenStream> = spec
+        .commands
+        .iter()
+        .map(|command| emit_surface_command_method(command, &nested_prefix, false))
+        .chain(surfaces.iter().map(|surface| emit_surface_surface_method(surface, &nested_prefix)))
+        .collect();
+    let wrappers = spec
+        .commands
+        .iter()
+        .map(|command| emit_surface_command_wrapper(spec, command));
+    let field_reader = crate::composite_root::emit_declared_field_reader(ident, &spec.declared_fields);
+    let nested = crate::nested::emit_nested_surface_impls(ident, visibility, &nested_methods);
+    let entry_types: Vec<&Type> = spec.commands.iter().map(|command| &command.ty).chain(surfaces.iter().map(|surface| &surface.ty)).collect();
+    let help = crate::nested::emit_entries_help_impl(ident, segment, &entry_types);
+
+    quote! {
+        #field_reader
+
+        #[derive(Debug, Clone)]
+        #visibility struct #rooted_ident<R>
+        where
+            R: ::xccute_contract::CompositeShellRoot,
+        {
+            inner: #ident,
+            _root: ::std::marker::PhantomData<R>,
+        }
+
+        impl<R> ::xccute_contract::RootableCompositeSurface<R> for #ident
+        where
+            R: ::xccute_contract::CompositeShellRoot,
+        {
+            type RootedSurface = #rooted_ident<R>;
+
+            fn rooted_surface(self) -> Self::RootedSurface {
+                #rooted_ident {
+                    inner: self,
+                    _root: ::std::marker::PhantomData,
+                }
+            }
+        }
+
+        impl ::xccute_contract::CompositeArgvPart for #ident {
+            fn push_argv_part(&self, out: &mut ::std::vec::Vec<::std::ffi::OsString>) {
+                out.push(::std::ffi::OsString::from(#segment));
+            }
+        }
+
+        impl<R> #rooted_ident<R>
+        where
+            R: ::xccute_contract::CompositeShellRoot,
+        {
+            #(#methods)*
+        }
+
+        #(#wrappers)*
+
+        #nested
+
+        #help
+    }
+}
+
+/// A command entry's method. `prefix` is what the command sits after and its
+/// type; `named` writes the return type as `{Surface}{Method}Command<R>`, the
+/// name a command directly under the surface has.
+fn emit_surface_command_method(
+    command: &CompositeSurfaceCommandQuote,
+    prefix: &(TokenStream, TokenStream),
+    named: bool,
+) -> TokenStream {
+    let method = &command.method;
+    let ty = &command.ty;
+    let rooted_ident = &command.rooted_ident;
+    let init_args = &command.init_args;
+    let (prefix_expr, prefix_ty) = prefix;
+
+    let inner_expr = if init_args.is_empty() {
+        quote! { <#ty as ::std::default::Default>::default() }
+    } else {
+        quote! { #ty::new(#(#init_args),*) }
+    };
+
+    let body = quote! {
+        <#ty as ::xccute_contract::RootableNestedCommand<R, #prefix_ty>>::nested(#inner_expr, #prefix_expr)
+    };
+    let returns = if named {
+        quote! { #rooted_ident<R> }
+    } else {
+        quote! { <#ty as ::xccute_contract::RootableNestedCommand<R, #prefix_ty>>::Nested }
+    };
+
+    if init_args.is_empty() {
+        quote! {
+            pub fn #method(self) -> #returns {
+                #body
+            }
+        }
+    } else {
+        let params = init_args.iter().map(|arg| {
+            quote! { #arg: impl ::std::convert::Into<::std::ffi::OsString> }
+        });
+
+        quote! {
+            pub fn #method(self, #(#params),*) -> #returns {
+                #body
+            }
+        }
+    }
+}
+
+/// A surface entry's method: the surface under this one, handed `prefix`.
+fn emit_surface_surface_method(surface: &CompositeNestedSurfaceQuote, prefix: &(TokenStream, TokenStream)) -> TokenStream {
+    let method = &surface.method;
+    let ty = &surface.ty;
+    let (prefix_expr, prefix_ty) = prefix;
+
+    quote! {
+        pub fn #method(self) -> <#ty as ::xccute_contract::RootableNestedSurface<R, #prefix_ty>>::NestedSurface
+        where
+            #ty: ::std::default::Default,
+        {
+            <#ty as ::xccute_contract::RootableNestedSurface<R, #prefix_ty>>::nested_surface(
+                <#ty as ::std::default::Default>::default(),
+                #prefix_expr,
+            )
+        }
+    }
+}
+
+fn emit_surface_command_wrapper(
+    spec: &CompositeSurfaceQuote,
+    command: &CompositeSurfaceCommandQuote,
+) -> TokenStream {
+    let visibility = &spec.visibility;
+    let surface_ty = &spec.ident;
+    let rooted_ident = &command.rooted_ident;
+    let command_ty = &command.ty;
+
+    quote! {
+        /// The command directly under this surface: its leaf's nested wrapper,
+        /// with the leaf's setters, exit statuses, validation and policy.
+        #visibility type #rooted_ident<R> =
+            <#command_ty as ::xccute_contract::RootableNestedCommand<R, #surface_ty>>::Nested;
+    }
+}
+
+/// The surface as 0.3.3 wrote it: each command a `{Surface}{Method}Command<R>`
+/// struct with the leaf's argv, validation and policy, but not its setters or
+/// exit statuses, and no surface inside it. simple_impl_derive writes
+/// [`emit_composite_surface_impls_with`] instead.
 pub fn emit_composite_surface_impls(spec: &CompositeSurfaceQuote) -> TokenStream {
     let ident = &spec.ident;
     let visibility = &spec.visibility;
@@ -85,11 +272,11 @@ pub fn emit_composite_surface_impls(spec: &CompositeSurfaceQuote) -> TokenStream
     let methods = spec
         .commands
         .iter()
-        .map(emit_surface_command_method);
+        .map(emit_rooted_surface_command_method);
     let wrappers = spec
         .commands
         .iter()
-        .map(|command| emit_surface_command_wrapper(spec, command));
+        .map(|command| emit_rooted_surface_command_wrapper(spec, command));
     let field_reader = crate::composite_root::emit_declared_field_reader(ident, &spec.declared_fields);
 
     quote! {
@@ -135,7 +322,7 @@ pub fn emit_composite_surface_impls(spec: &CompositeSurfaceQuote) -> TokenStream
     }
 }
 
-fn emit_surface_command_method(command: &CompositeSurfaceCommandQuote) -> TokenStream {
+fn emit_rooted_surface_command_method(command: &CompositeSurfaceCommandQuote) -> TokenStream {
     let method = &command.method;
     let ty = &command.ty;
     let rooted_ident = &command.rooted_ident;
@@ -174,7 +361,7 @@ fn emit_surface_command_method(command: &CompositeSurfaceCommandQuote) -> TokenS
     }
 }
 
-fn emit_surface_command_wrapper(
+fn emit_rooted_surface_command_wrapper(
     spec: &CompositeSurfaceQuote,
     command: &CompositeSurfaceCommandQuote,
 ) -> TokenStream {

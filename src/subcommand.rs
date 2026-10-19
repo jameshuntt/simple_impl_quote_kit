@@ -102,6 +102,7 @@ pub struct SubcommandShapeQuote {
     program: Option<String>,
     exit_statuses: Vec<ExitStatusQuote>,
     ok_codes: Vec<i32>,
+    help: Option<(String, String)>,
 }
 
 impl SubcommandShapeQuote {
@@ -130,6 +131,18 @@ impl SubcommandShapeQuote {
         self.exit_statuses = statuses;
         self.ok_codes = ok_codes;
         self
+    }
+
+    /// The leaf's help line: its words as the declaration writes them
+    /// (`start [NAME] [--kind KIND]`) and its doc. Emitted as an
+    /// `xccute_contract::CommandHelp` impl; a shape without it emits none.
+    pub fn with_help(mut self, words: impl Into<String>, about: impl Into<String>) -> Self {
+        self.help = Some((words.into(), about.into()));
+        self
+    }
+
+    pub fn help(&self) -> Option<(&str, &str)> {
+        self.help.as_ref().map(|(words, about)| (words.as_str(), about.as_str()))
     }
 
     pub fn is_without_segment(&self) -> bool {
@@ -232,6 +245,24 @@ pub fn emit_simple_subcommand_contract_impls_shaped(
         #shell_command_impl
         #validated_command_impl
         #own_root
+    })
+}
+
+/// What carries the leaf under surfaces, to any depth: its nested wrapper
+/// with the same setters and exit statuses its rooted wrapper has, and its
+/// `xccute_contract::CommandHelp` impl when `shape` has a help line. Emitted
+/// beside [`emit_simple_subcommand_contract_impls_shaped`]'s tokens, which it
+/// leaves as they were.
+pub fn emit_simple_subcommand_nested_impls(spec: &SimpleSubcommandQuote, shape: &SubcommandShapeQuote) -> syn::Result<TokenStream> {
+    let mut errs = SynBuffer::new();
+    let setters: Vec<TokenStream> = spec.fields.iter().filter_map(|field| errs.absorb(emit_rooted_setter(field))).collect();
+    errs.finish()?;
+    let status_methods = emit_exit_status_methods(shape);
+    let nested = crate::nested::emit_nested_command_impls(&spec.ident, &spec.visibility, &setters, &status_methods);
+    let help = shape.help.as_ref().map(|(words, about)| crate::nested::emit_leaf_help_impl(&spec.ident, words, about));
+    Ok(quote! {
+        #nested
+        #help
     })
 }
 
