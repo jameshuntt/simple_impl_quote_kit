@@ -2,13 +2,17 @@ use simple_impl_quote_kit::{
     emit_composite_shell_root_impls,
     emit_composite_surface_impls,
     emit_simple_subcommand_contract_impls,
+    emit_simple_subcommand_contract_impls_shaped,
+    emit_simple_subcommand_contract_impls_skipping,
     CompositeShellEntryQuote,
+    ExitStatusQuote,
     CompositeShellQuote,
     CompositeSurfaceCommandQuote,
     CompositeSurfaceQuote,
     SimpleSubcommandQuote,
     SubcommandArgKind,
     SubcommandFieldQuote,
+    SubcommandShapeQuote,
     ValidationRuleQuote,
 };
 use syn::{parse_quote, Ident, Visibility};
@@ -234,4 +238,55 @@ fn emits_custom_validation_hook_for_simple_subcommand() {
     let tokens = emit_simple_subcommand_contract_impls(&spec).unwrap().to_string();
     assert!(tokens.contains("validate_clone_url_preflight"));
     assert!(tokens.contains("fn validate"));
+}
+
+fn list_spec() -> SimpleSubcommandQuote {
+    SimpleSubcommandQuote::new(
+        ident("Stop"),
+        parse_quote!(pub),
+        "stop",
+        vec![
+            SubcommandFieldQuote::new(ident("units"), parse_quote!(Vec<::std::ffi::OsString>), ident("units"), SubcommandArgKind::Positional),
+            SubcommandFieldQuote::new(ident("props"), parse_quote!(Vec<::std::ffi::OsString>), ident("props"), SubcommandArgKind::KeyValue("-p".into())),
+        ],
+    )
+    .with_validation_rules(vec![ValidationRuleQuote::OneOf { fields: vec![ident("units")] }])
+}
+
+#[test]
+fn a_vec_field_is_one_word_per_value_and_its_setter_adds_to_it() {
+    let tokens = emit_simple_subcommand_contract_impls(&list_spec()).unwrap().to_string();
+    assert!(tokens.contains("for value in & self . units { out . push (value . clone ()) ; }"), "{tokens}");
+    assert!(tokens.contains("for value in & self . props { out . push (:: std :: ffi :: OsString :: from (\"-p\")) ; out . push (value . clone ()) ; }"), "{tokens}");
+    assert!(tokens.contains("pub fn units (mut self , values : impl :: std :: iter :: IntoIterator < Item = impl Into < :: std :: ffi :: OsString >>) -> Self { self . inner . units . extend (values . into_iter () . map (Into :: into)) ; self }"), "{tokens}");
+    // a list is given when it has a value
+    assert!(tokens.contains("! self . units . is_empty ()"), "{tokens}");
+}
+
+#[test]
+fn the_default_shape_emits_what_skipping_does() {
+    let spec = list_spec();
+    let skipping = emit_simple_subcommand_contract_impls_skipping(&spec, &[], &[]).unwrap().to_string();
+    let shaped = emit_simple_subcommand_contract_impls_shaped(&spec, &[], &[], &SubcommandShapeQuote::default()).unwrap().to_string();
+    assert_eq!(skipping, shaped);
+}
+
+#[test]
+fn a_shape_drops_the_segment_names_the_program_and_the_statuses() {
+    let shape = SubcommandShapeQuote::new()
+        .without_segment()
+        .with_program("chown")
+        .with_exit_statuses(vec![ExitStatusQuote::new(0, "ok", true), ExitStatusQuote::new(1, "failed", false)], vec![0]);
+    assert!(shape.is_without_segment());
+    assert_eq!(shape.program(), Some("chown"));
+    assert_eq!(shape.ok_codes(), [0]);
+    let tokens = emit_simple_subcommand_contract_impls_shaped(&list_spec(), &[], &[], &shape).unwrap().to_string();
+    assert!(!tokens.contains("OsString :: from (\"stop\")"), "{tokens}");
+    assert!(tokens.contains("impl :: xccute_contract :: CompositeShellRoot for Stop"), "{tokens}");
+    assert!(tokens.contains("impl :: xccute_contract :: CompositeShellCommand for Stop"), "{tokens}");
+    assert!(tokens.contains("self . units . extend"), "{tokens}");
+    assert!(tokens.contains("fn ok_codes (& self) -> & 'static [i32] { & [0i32] }"), "{tokens}");
+    assert!(tokens.contains(":: xccute_contract :: ExitStatusWord { code : 1i32 , word : \"failed\" , accepted : false }"), "{tokens}");
+    // both the rooted wrapper and the command itself name the statuses
+    assert_eq!(tokens.matches("fn exit_statuses").count(), 2, "{tokens}");
 }

@@ -5,6 +5,12 @@ use syn::Ident;
 use crate::rooted::rooted_ident_for;
 
 pub fn emit_composite_shell_command_impl(ident: &Ident) -> TokenStream {
+    emit_composite_shell_command_impl_with(ident, &TokenStream::new())
+}
+
+/// [`emit_composite_shell_command_impl`] with more of the trait's methods
+/// written into the impl (a leaf's `ok_codes` and `exit_statuses`).
+pub fn emit_composite_shell_command_impl_with(ident: &Ident, methods: &TokenStream) -> TokenStream {
     let rooted_ident = rooted_ident_for(ident);
 
     quote! {
@@ -19,6 +25,7 @@ pub fn emit_composite_shell_command_impl(ident: &Ident) -> TokenStream {
             fn push_args(&self, out: &mut ::std::vec::Vec<::std::ffi::OsString>) {
                 ::xccute_contract::CompositeArgvPart::push_argv_part(&self.inner, out);
             }
+            #methods
         }
 
     }

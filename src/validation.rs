@@ -229,6 +229,9 @@ fn active_expr_for_field(field: &Ident, ty: &Type) -> TokenStream {
         quote! { self.#field }
     } else if simple_impl_attr_kit::is_option_ty(ty) {
         quote! { self.#field.is_some() }
+    } else if simple_impl_attr_kit::is_vec_ty(ty) {
+        // a repeated value is given when it has at least one
+        quote! { !self.#field.is_empty() }
     } else {
         // Required/initialized command operands are always considered present.
         quote! { true }

@@ -20,7 +20,7 @@ pub use composite_root::{
     CompositeShellEntryQuote,
     CompositeShellQuote,
 };
-pub use composite_shell::emit_composite_shell_command_impl;
+pub use composite_shell::{emit_composite_shell_command_impl, emit_composite_shell_command_impl_with};
 pub use composite_surface::{
     emit_composite_surface_impls,
     nested_command_rooted_ident_for,
@@ -29,11 +29,14 @@ pub use composite_surface::{
     CompositeSurfaceQuote,
 };
 pub use rooted::emit_rooted_wrapper_and_rooting_impls;
-pub use setters::emit_rooted_setter;
+pub use setters::{emit_own_setter, emit_rooted_setter};
 pub use subcommand::{
     emit_simple_subcommand_contract_impls,
+    emit_simple_subcommand_contract_impls_shaped,
     emit_simple_subcommand_contract_impls_skipping,
+    ExitStatusQuote,
     SimpleSubcommandQuote,
+    SubcommandShapeQuote,
     SubcommandArgKind,
     SubcommandFieldQuote,
 };

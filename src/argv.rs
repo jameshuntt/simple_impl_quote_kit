@@ -22,7 +22,15 @@ pub fn emit_subcommand_field_argv_push(field: &SubcommandFieldQuote) -> syn::Res
             })
         }
         SubcommandArgKind::KeyValue(key) => {
-            if simple_impl_attr_kit::is_option_ty(&field.ty) {
+            if simple_impl_attr_kit::is_vec_ty(&field.ty) {
+                // a repeated value: `key value` for each, in order
+                Ok(quote! {
+                    for value in &self.#field_ident {
+                        out.push(::std::ffi::OsString::from(#key));
+                        out.push(value.clone());
+                    }
+                })
+            } else if simple_impl_attr_kit::is_option_ty(&field.ty) {
                 Ok(quote! {
                     if let Some(value) = &self.#field_ident {
                         out.push(::std::ffi::OsString::from(#key));
@@ -37,7 +45,14 @@ pub fn emit_subcommand_field_argv_push(field: &SubcommandFieldQuote) -> syn::Res
             }
         }
         SubcommandArgKind::Positional => {
-            if simple_impl_attr_kit::is_option_ty(&field.ty) {
+            if simple_impl_attr_kit::is_vec_ty(&field.ty) {
+                // a repeated positional: each value its own word, in order
+                Ok(quote! {
+                    for value in &self.#field_ident {
+                        out.push(value.clone());
+                    }
+                })
+            } else if simple_impl_attr_kit::is_option_ty(&field.ty) {
                 Ok(quote! {
                     if let Some(value) = &self.#field_ident {
                         out.push(value.clone());
